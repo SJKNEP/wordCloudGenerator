@@ -3,81 +3,156 @@ package wordCloudGenerator
 import (
 	"errors"
 	"fmt"
-	"github.com/fogleman/gg"
 	"github.com/golang/freetype/truetype"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/jpeg"
+	"image/png"
 	"log"
 	"math/rand"
+	"os"
 	"time"
 )
 
-func (w *WordCloud) MakeCanvas(x uint, y uint) {
-	log.Printf("creating canvas with size: %d, %d", x, y)
-	w.img = gg.NewContext(int(x), int(y))
+var rnd = rand.NewSource(time.Now().UnixMilli())
+
+func (w *WordCloud) MakeCanvas(x int, y int) {
+	w.img = image.NewRGBA(image.Rect(0, 0, x, y))
+	w.imgWidth = x
+	w.imgHeight = y
 }
 
-func (w *WordCloud) PlaceWords() {
-	//
-	w.img.SetHexColor("#FFFFFF")
-	w.img.DrawRectangle(0, 0, float64(w.img.Width()), float64(w.img.Height()))
-	w.img.Fill()
-	w.img.SetHexColor("#FF0000")
+func (w *WordCloud) PlaceWords() error {
+	if len(w.wordList) == 0 {
+		return errors.New("no words to place")
+	}
 
-	//temp crosshair
-	y := float64(w.img.Height() / 2)
-	x := float64(w.img.Width() / 2)
-	w.img.DrawLine(0, y, float64(w.img.Width()), y)
-	w.img.DrawLine(x, 0, x, float64(w.img.Height()))
-	w.img.SetLineWidth(1)
-	w.img.Stroke()
+	//draw background color
+	r := image.Rectangle{
+		Min: image.Point{X: 0, Y: 0},
+		Max: image.Point{X: w.imgWidth, Y: w.imgHeight},
+	}
+	draw.Draw(w.img, r, &image.Uniform{C: color.Color(w.BackgroundColor)}, image.Point{}, draw.Src)
+
+	//draw crosshair
+	//y := float64(w.img.Bounds().Dy() / 2)
+	//x := float64(w.img.Bounds().Dx() / 2)
+	//
+	//r = image.Rectangle{
+	//	Min: image.Point{X: 0, Y: int(y) - 1},
+	//	Max: image.Point{X: w.img.Bounds().Dx(), Y: int(y) + 2},
+	//}
+	//draw.Draw(w.img, r, &image.Uniform{C: color.RGBA{0, 0, 0, 255}}, image.Point{}, draw.Src)
+	//
+	//r = image.Rectangle{
+	//	Min: image.Point{X: int(x) - 1, Y: 0},
+	//	Max: image.Point{X: int(x) + 2, Y: w.img.Bounds().Dy()},
+	//}
+	//
+	//draw.Draw(w.img, r, &image.Uniform{C: color.RGBA{0, 0, 0, 255}}, image.Point{}, draw.Src)
+	///end of temp crosshair
+
 	for i, _ := range w.wordList {
 		w.placeWord(&w.wordList[i], Color{255, 255, 255})
-		log.Printf("%v", w.wordList[i])
-		//add word to placedWords
-		w.placedWords = append(w.placedWords, w.wordList[i])
 	}
+
+	f, err := os.Create("img2.png")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	fmt.Println("saveing file")
+	if err = png.Encode(f, w.img); err != nil {
+		log.Printf("failed to encode: %v", err)
+	}
+	return nil
 }
 
 func (w *WordCloud) drawRect(wrd *word) {
-	w.img.SetRGBA(255, 0, 0, 0.5)
-	w.img.DrawRectangle(wrd.x, wrd.y, wrd.width, wrd.height)
-	w.img.Fill()
+	//w.img.SetRGBA(255, 0, 0, 0.5)
+	////w.img.DrawRectangle(wrd.x, wrd.y, wrd.width, wrd.height)
+	//w.img.Fill()
 }
 
 func (w *WordCloud) placeWord(wrd *word, c Color) {
+	//first word is the biggest wordt and should be placed in the middle
+	x := 0
+	y := 0
 	if len(w.placedWords) == 0 {
-		w.img.SetFontFace(wrd.font)
-		x := float64(w.img.Width()) / 2
-		y := float64(w.img.Height()) / 2
-		w.img.SetRGB(c.Red, c.Green, c.Blue)
-		//w.img.DrawString(wrd.word, x, y)
-		w.img.DrawStringAnchored(wrd.word, x, y, 0.5, 0.5)
+		fmt.Println(wrd.height, wrd.width)
+		y = (w.imgHeight / 2) + (wrd.height / 2)
+		x = (w.imgWidth / 2) - (wrd.width / 2)
 		wrd.x = x
 		wrd.y = y
-
-		//w.drawRect(wrd)
-		return
+	} else {
+		x, y, _ = w.findFreePosition(wrd)
 	}
-	s1 := rand.NewSource(time.Now().UnixNano())
-	r1 := rand.New(s1)
+	pos := fixed.Point26_6{}
+	pos.X = fixed.Int26_6(x << 6)
+	pos.Y = fixed.Int26_6(y << 6)
+	fnt := font.Drawer{
+		Dst:  w.img,
+		Src:  image.NewUniform(color.RGBA{255, 0, 0, 255}),
+		Face: w.fontCollection[wrd.size],
+		Dot:  pos,
+	}
+	fnt.DrawString(wrd.word)
+	w.placedWords = append(w.placedWords, *wrd)
+}
+
+func (w *WordCloud) findFreePosition(wrd *word) (int, int, error) {
 	var x, y int
+	i := 1
 	for {
-		x = r1.Intn(w.img.Width())
-		y = r1.Intn(w.img.Height())
-		wrd.y = float64(y)
-		wrd.x = float64(x)
-		if !w.checkCollition(wrd) {
-			break
-		}
-		fmt.Println("collision")
-	}
-	w.img.SetFontFace(wrd.font)
-	w.img.SetRGB(c.Red, c.Green, c.Blue)
-	//w.img.DrawString(wrd.word, float64(x), float64(y))
-	w.img.DrawStringAnchored(wrd.word, wrd.x, wrd.y, 0.5, 0.5)
-	//w.drawRect(wrd)
+		//get a random x position between 0 and the width of the image - the width of the word
 
+		x = int(rnd.Int63() % int64(w.imgWidth-wrd.width))
+		y = int(rnd.Int63()%int64(w.imgHeight-wrd.height)) + wrd.height
+		wrd.x = x
+		wrd.y = y
+		if w.checkCollition(wrd, 20) {
+			i++
+			if i > 1000 {
+				fmt.Println("could not find free position for", wrd.word)
+				return 0, 0, errors.New("could not find free position")
+			}
+			continue
+		}
+		//move closer to center until we hit something
+		dx := 10
+		dy := 10
+		if x > w.imgWidth/2 {
+			dx = -10
+		}
+		if y > w.imgHeight/2 {
+			dy = -10
+		}
+
+		for {
+			i++
+			if i > 10000 {
+				fmt.Println("could not find free position for", wrd.word)
+				return 0, 0, errors.New("could not find free position")
+			}
+			if w.checkCollition(wrd, 20) {
+				break
+			}
+			x = x + dx
+			y = y + dy
+			wrd.x = x
+			wrd.y = y
+		}
+
+		fmt.Println("found free position")
+		return x, y, nil
+
+	}
+
+	return x, y, nil
 }
 
 func (w *WordCloud) makeFont(size float64) (font.Face, error) {
@@ -147,12 +222,13 @@ func (w *WordCloud) SetFont(file string) error {
 
 func (w *WordCloud) SaveImage(fileName string) error {
 	log.Printf("trying to save image to: %s", fileName)
-
-	//save image to file
-	err := w.img.SavePNG(fileName)
+	f, err := os.Create(fileName)
 	if err != nil {
-		log.Printf("error sveing image: %s", err)
 		return err
+	}
+	defer f.Close()
+	if err = jpeg.Encode(f, w.img, nil); err != nil {
+		log.Printf("failed to encode: %v", err)
 	}
 	return nil
 }

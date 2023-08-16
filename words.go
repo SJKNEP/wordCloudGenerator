@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"golang.org/x/image/font"
 	"log"
+	"math"
 )
 
 func (w *WordCloud) ParseWordList(wl []string) {
@@ -37,6 +38,10 @@ func sortWordList(wl map[string]uint) []word {
 		wordList = append(wordList, w)
 		delete(wl, w.word)
 	}
+	if len(wordList) == 0 {
+		fmt.Println("no words in wordList")
+		panic("no words in wordList")
+	}
 	return wordList
 }
 
@@ -47,9 +52,9 @@ func (w *WordCloud) calcWordSize() {
 		totalWords += 1
 		totalWordRepetitions += int(word.count)
 	}
-	totalCanvasArea := w.img.Width() * w.img.Height()
+	totalCanvasArea := w.imgWidth * w.imgHeight
 
-	if totalCanvasArea < 200 {
+	if totalCanvasArea < 1800 {
 		log.Printf("Warning: Canvas area is very small: %d\n", totalCanvasArea)
 		return
 	}
@@ -61,41 +66,48 @@ out:
 		log.Printf("trying to fit with size: %d\n", size)
 		baseFontSize := totalCanvasArea / (totalWordRepetitions * totalWordRepetitions * size)
 		fmt.Println("BaseFontSize:", baseFontSize)
-		totalWordSize := 0.0
+		totalWordSize := 0
 
 		for i, word := range w.wordList {
 			log.Printf("word: %s, count: %d", word.word, word.count)
 			w.wordList[i].size = float64(baseFontSize) * float64(word.count)
-			//check if font is already made
+			//check if font is already made only make new ones if needed
 			if _, ok := fontCollection[w.wordList[i].size]; !ok {
-				font, err := w.makeFont(w.wordList[i].size)
+				newFont, err := w.makeFont(w.wordList[i].size)
 				if err != nil {
 					log.Printf("error making font: %s", err)
 					return
 				}
-				fontCollection[w.wordList[i].size] = font
+				fontCollection[w.wordList[i].size] = newFont
 			}
-			w.img.SetFontFace(fontCollection[w.wordList[i].size])
-			wd, hg := w.img.MeasureString(word.word)
-			if wd > float64(w.img.Width())*.9 || hg > float64(w.img.Height())*.9 {
+
+			fnt := font.Drawer{
+				Face: fontCollection[w.wordList[i].size],
+			}
+			bounds, temp := fnt.BoundString(word.word)
+			wd := int(math.Abs(float64(bounds.Max.X.Ceil()) - float64(bounds.Min.X.Ceil())))
+			hg := int(math.Abs(float64(bounds.Max.Y.Ceil()) - float64(bounds.Min.Y.Ceil())))
+			println(temp)
+			if float64(wd) > float64(w.imgWidth)*.9 || float64(hg) > float64(w.imgHeight)*.9 {
 				size = size + 1
 				continue out //word is too big, try again with bigger size
 			}
-			w.wordList[i].font = fontCollection[w.wordList[i].size]
-			log.Printf("word: %s, size: %f, width: %f, height: %f", word.word, w.wordList[i].size, wd, hg)
 			w.wordList[i].width = wd
 			w.wordList[i].height = hg
+
+			log.Printf("word: %s, size: %f, width: %f, height: %f", word.word, w.wordList[i].size, wd, hg)
 			totalWordSize += wd * hg
 
 		}
 		log.Printf("total word size: %f\ntotal canvas size:%d", totalWordSize, totalCanvasArea)
-		if totalWordSize < float64(totalCanvasArea) {
+		if totalWordSize < int(float64(totalCanvasArea)*.8) {
 			break out
 		}
 		size = size + 1
 		log.Printf("Too big, needs to be smaller")
 	}
 	fmt.Printf("total words: %d\ntotal Repetitions: %d\n", totalWords, totalWordRepetitions)
+	w.fontCollection = fontCollection
 }
 
 //func (w *WordCloud) checkCollition(x float64, y float64, wrd *word) bool {
@@ -110,13 +122,26 @@ out:
 //	return false
 //}-wrd.height
 
-func (w *WordCloud) checkCollition(wrd *word) bool {
+func (w *WordCloud) checkCollition(wrd *word, s int) bool {
 	for _, placedWord := range w.placedWords {
-		if (wrd.x <= placedWord.x+placedWord.width && wrd.x+wrd.width >= placedWord.x) &&
-			// Check if the boxes share a common point or edge in the Y-axis
-			(wrd.y-wrd.height <= placedWord.y && wrd.y >= placedWord.y-placedWord.height) {
+		//add a s pixel buffer to the collition check
+		if wrd.x <= placedWord.x+placedWord.width+s &&
+			wrd.x+wrd.width >= placedWord.x-s &&
+			wrd.y-wrd.height <= placedWord.y+s &&
+			wrd.y >= placedWord.y-placedWord.height-s {
 			return true
 		}
 	}
 	return false
 }
+
+//	}
+//	// Check if the boxes share a common point or edge in the X-axis
+//	if (wrd.x <= placedWord.x+placedWord.width && wrd.x+wrd.width >= placedWord.x) &&
+//		// Check if the boxes share a common point or edge in the Y-axis
+//		(wrd.y-wrd.height <= (placedWord.y+s) && wrd.y >= placedWord.y-placedWord.height) {
+//		return true
+//	}
+//}
+//return false
+//}

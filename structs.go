@@ -1,19 +1,22 @@
 package wordCloudGenerator
 
 import (
-	"github.com/fogleman/gg"
 	"golang.org/x/image/font"
 	"image"
+	"image/color"
 )
 
 type WordCloud struct {
-	img             *gg.Context
+	img             *image.RGBA
+	imgWidth        int
+	imgHeight       int
 	words           []string
 	font            []byte
 	fontType        FontType
-	backgroundColor image.RGBA
+	BackgroundColor color.RGBA
 	wordList        []word
 	placedWords     []word
+	fontCollection  map[float64]font.Face
 }
 
 type Color struct {
@@ -33,12 +36,12 @@ const (
 type word struct {
 	word   string
 	count  uint
-	height float64
-	width  float64
+	height int
+	width  int
 	size   float64
-	font   font.Face
-	x      float64
-	y      float64
+	font   *font.Face
+	x      int
+	y      int
 }
 
 type fonts map[float64]font.Face
