@@ -59,18 +59,18 @@ func (w *WordCloud) calcWordSize() {
 		return
 	}
 
-	size := 1
+	size := 1.0
 	fontCollection := map[float64]font.Face{}
 out:
 	for {
 		log.Printf("trying to fit with size: %d\n", size)
-		baseFontSize := totalCanvasArea / (totalWordRepetitions * totalWordRepetitions * size)
+		baseFontSize := float64(totalCanvasArea) / (float64(totalWordRepetitions*totalWordRepetitions) * size)
 		fmt.Println("BaseFontSize:", baseFontSize)
 		totalWordSize := 0
 
 		for i, word := range w.wordList {
 			log.Printf("word: %s, count: %d", word.word, word.count)
-			w.wordList[i].size = float64(baseFontSize) * float64(word.count)
+			w.wordList[i].size = baseFontSize * float64(word.count)
 			//check if font is already made only make new ones if needed
 			if _, ok := fontCollection[w.wordList[i].size]; !ok {
 				newFont, err := w.makeFont(w.wordList[i].size)
@@ -100,7 +100,7 @@ out:
 
 		}
 		log.Printf("total word size: %f\ntotal canvas size:%d", totalWordSize, totalCanvasArea)
-		if totalWordSize < int(float64(totalCanvasArea)*.8) {
+		if totalWordSize < int(float64(totalCanvasArea)) {
 			break out
 		}
 		size = size + 1

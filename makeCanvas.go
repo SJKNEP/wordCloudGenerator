@@ -13,6 +13,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"time"
@@ -57,7 +58,8 @@ func (w *WordCloud) PlaceWords() error {
 	///end of temp crosshair
 
 	for i, _ := range w.wordList {
-		w.placeWord(&w.wordList[i], Color{255, 255, 255})
+		c := randomColor()
+		w.placeWord(&w.wordList[i], c)
 	}
 
 	f, err := os.Create("img2.png")
@@ -78,7 +80,7 @@ func (w *WordCloud) drawRect(wrd *word) {
 	//w.img.Fill()
 }
 
-func (w *WordCloud) placeWord(wrd *word, c Color) {
+func (w *WordCloud) placeWord(wrd *word, c color.Color) {
 	//first word is the biggest wordt and should be placed in the middle
 	x := 0
 	y := 0
@@ -89,14 +91,19 @@ func (w *WordCloud) placeWord(wrd *word, c Color) {
 		wrd.x = x
 		wrd.y = y
 	} else {
-		x, y, _ = w.findFreePosition(wrd)
+		var err error
+		x, y, err = w.findFreePosition(wrd)
+		if err != nil {
+			log.Fatal("could not find free position")
+		}
 	}
+
 	pos := fixed.Point26_6{}
 	pos.X = fixed.Int26_6(x << 6)
 	pos.Y = fixed.Int26_6(y << 6)
 	fnt := font.Drawer{
 		Dst:  w.img,
-		Src:  image.NewUniform(color.RGBA{255, 0, 0, 255}),
+		Src:  image.NewUniform(c),
 		Face: w.fontCollection[wrd.size],
 		Dot:  pos,
 	}
@@ -122,32 +129,16 @@ func (w *WordCloud) findFreePosition(wrd *word) (int, int, error) {
 			}
 			continue
 		}
-		//move closer to center until we hit something
-		dx := 10
-		dy := 10
-		if x > w.imgWidth/2 {
-			dx = -10
-		}
-		if y > w.imgHeight/2 {
-			dy = -10
-		}
-
-		for {
-			i++
-			if i > 10000 {
-				fmt.Println("could not find free position for", wrd.word)
-				return 0, 0, errors.New("could not find free position")
-			}
-			if w.checkCollition(wrd, 20) {
-				break
-			}
-			x = x + dx
-			y = y + dy
-			wrd.x = x
-			wrd.y = y
-		}
+		//move vertical to center until we hit something
+		x, y := w.moveImage(x, y, 0, 10, wrd)
+		//move horizontal to the center of the image until we hit something
+		x, y = w.moveImage(x, y, 10, 0, wrd)
+		////move vertical to the center of the image until we hit something
+		//w.moveImage(wrd.x, wrd.y, 0, -10, wrd)
 
 		fmt.Println("found free position")
+		wrd.x = x
+		wrd.y = y
 		return x, y, nil
 
 	}
@@ -231,4 +222,49 @@ func (w *WordCloud) SaveImage(fileName string) error {
 		log.Printf("failed to encode: %v", err)
 	}
 	return nil
+}
+
+func randomColor() color.Color {
+	r := uint8(rnd.Int63() % 255)
+	g := uint8(rnd.Int63() % 255)
+	b := uint8(rnd.Int63() % 255)
+	c := color.RGBA{
+		R: r,
+		G: g,
+		B: b,
+		A: 255,
+	}
+	return c
+}
+func (w *WordCloud) moveImage(x, y, dx, dy int, wrd *word) (int, int) {
+	w2 := *wrd
+	xBreak := int((w.imgHeight + wrd.height) / 2)
+	yBreak := int((w.imgWidth - wrd.width) / 2)
+	if x > w.imgWidth/2 {
+		dx = dx * -1
+	}
+	if y > w.imgHeight/2 {
+		dy = dy * -1
+	}
+	i := 1
+	xn, yn := x, y
+	for {
+		i++
+		if i > 10000 {
+			return xn, yn
+		}
+		w2.x = xn
+		w2.y = yn
+		if w.checkCollition(&w2, 10) {
+			xn = xn - dx
+			yn = yn - dy
+			return xn, yn
+		}
+		if math.Abs(float64(xBreak-xn)) < float64(dx) || math.Abs(float64(yBreak-yn)) < float64(dy) {
+			return xn, yn
+		}
+		xn = xn + dx
+		yn = yn + dy
+	}
+	return xn, yn
 }
