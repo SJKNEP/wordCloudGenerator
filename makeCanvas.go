@@ -3,9 +3,8 @@ package wordCloudGenerator
 import (
 	"errors"
 	"fmt"
-	"github.com/golang/freetype/truetype"
+	"github.com/anthonynsimon/bild/transform"
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 	"image"
 	"image/color"
@@ -38,28 +37,14 @@ func (w *WordCloud) PlaceWords() error {
 		Max: image.Point{X: w.imgWidth, Y: w.imgHeight},
 	}
 	draw.Draw(w.img, r, &image.Uniform{C: color.Color(w.BackgroundColor)}, image.Point{}, draw.Src)
-
-	//draw crosshair
-	//y := float64(w.img.Bounds().Dy() / 2)
-	//x := float64(w.img.Bounds().Dx() / 2)
-	//
-	//r = image.Rectangle{
-	//	Min: image.Point{X: 0, Y: int(y) - 1},
-	//	Max: image.Point{X: w.img.Bounds().Dx(), Y: int(y) + 2},
-	//}
-	//draw.Draw(w.img, r, &image.Uniform{C: color.RGBA{0, 0, 0, 255}}, image.Point{}, draw.Src)
-	//
-	//r = image.Rectangle{
-	//	Min: image.Point{X: int(x) - 1, Y: 0},
-	//	Max: image.Point{X: int(x) + 2, Y: w.img.Bounds().Dy()},
-	//}
-	//
-	//draw.Draw(w.img, r, &image.Uniform{C: color.RGBA{0, 0, 0, 255}}, image.Point{}, draw.Src)
-	///end of temp crosshair
-
+	var err1 error
+	w.placedWords = []word{}
 	for i, _ := range w.wordList {
-		c := randomColor()
-		w.placeWord(&w.wordList[i], c)
+		c, err := w.getColor()
+		if err != nil {
+			return err
+		}
+		err1 = w.placeWord(&w.wordList[i], c)
 	}
 
 	f, err := os.Create("img2.png")
@@ -71,144 +56,138 @@ func (w *WordCloud) PlaceWords() error {
 	if err = png.Encode(f, w.img); err != nil {
 		log.Printf("failed to encode: %v", err)
 	}
+	if err1 != nil {
+		return err1
+	}
 	return nil
 }
 
-func (w *WordCloud) drawRect(wrd *word) {
-	//w.img.SetRGBA(255, 0, 0, 0.5)
-	////w.img.DrawRectangle(wrd.x, wrd.y, wrd.width, wrd.height)
-	//w.img.Fill()
-}
-
-func (w *WordCloud) placeWord(wrd *word, c color.Color) {
-	//first word is the biggest wordt and should be placed in the middle
-	x := 0
-	y := 0
-	if len(w.placedWords) == 0 {
-		fmt.Println(wrd.height, wrd.width)
-		y = (w.imgHeight / 2) + (wrd.height / 2)
-		x = (w.imgWidth / 2) - (wrd.width / 2)
+func (w *WordCloud) placeWord(wrd *word, c color.Color) error {
+	var img *image.RGBA
+	if len(w.placedWords) == 0 && w.PlacementBiggestWord == PlacementCenter {
+		y := (w.imgHeight / 2) + (wrd.height / 2)
+		x := (w.imgWidth / 2) - (wrd.width / 2)
 		wrd.x = x
 		wrd.y = y
-	} else {
-		var err error
-		x, y, err = w.findFreePosition(wrd)
-		if err != nil {
-			log.Fatal("could not find free position")
+		pos := fixed.Point26_6{}
+		//i hate magic numbers
+		pos.X = fixed.Int26_6((wrd.x - w.FreeSpaceAroundWords) << 6)
+		pos.Y = fixed.Int26_6((wrd.y) << 6)
+		fnt := font.Drawer{
+			Dst:  w.img,
+			Src:  image.NewUniform(c),
+			Face: w.fontCollection[wrd.size],
+			Dot:  pos,
 		}
+		fnt.DrawString(wrd.word)
+	} else {
+		//get a random result that is 75% of the time true
+		wrd.horizontal = rnd.Int63()%100 < 75
+		//wrd.horizontal = false
+		if w.Placement != PlacementRandomWithRotation && w.Placement != PlacementCenterWithRotation {
+			wrd.horizontal = true
+		}
+		if !wrd.horizontal {
+			//new image with the size of the word
+			//size is swapped because we need to rotate the image
+			img = image.NewRGBA(image.Rect(0, 0, wrd.width, wrd.height))
+			pos := fixed.Point26_6{}
+			pos.X = fixed.Int26_6(0)
+			pos.Y = fixed.Int26_6(wrd.height << 6)
+			fnt := font.Drawer{
+				Dst:  img,
+				Src:  image.NewUniform(c),
+				Face: w.fontCollection[wrd.size],
+				Dot:  pos,
+			}
+			fnt.DrawString(wrd.word)
+			//rotate the image
+			img = transform.Rotate(img, 90, &transform.RotationOptions{
+				ResizeBounds: true,
+				Pivot:        &image.Point{X: 0, Y: 0},
+			})
+			s := img.Rect.Bounds()
+			wrd.width = s.Max.X
+			wrd.height = s.Max.Y
+		}
+		var err error
+		wrd.x, wrd.y, err = w.findFreePosition(wrd)
+		if err != nil {
+			return err
+		}
+		if wrd.horizontal {
+			pos := fixed.Point26_6{}
+			pos.X = fixed.Int26_6(wrd.x << 6)
+			pos.Y = fixed.Int26_6(wrd.y << 6)
+			fnt := font.Drawer{
+				Dst:  w.img,
+				Src:  image.NewUniform(c),
+				Face: w.fontCollection[wrd.size],
+				Dot:  pos,
+			}
+			fnt.DrawString(wrd.word)
+		} else {
+			s := img.Rect.Bounds()
+			//draw the image on the canvas w.img
+			r := image.Rectangle{
+				Min: image.Point{X: wrd.x, Y: wrd.y - s.Max.Y},
+				Max: image.Point{X: wrd.x + s.Max.X, Y: wrd.y},
+			}
+			//draw this image with alpha ontop of w.img
+			draw.Draw(w.img, r, img, image.Point{}, draw.Over)
+
+		}
+
 	}
 
-	pos := fixed.Point26_6{}
-	pos.X = fixed.Int26_6(x << 6)
-	pos.Y = fixed.Int26_6(y << 6)
-	fnt := font.Drawer{
-		Dst:  w.img,
-		Src:  image.NewUniform(c),
-		Face: w.fontCollection[wrd.size],
-		Dot:  pos,
-	}
-	fnt.DrawString(wrd.word)
 	w.placedWords = append(w.placedWords, *wrd)
+	return nil
 }
 
 func (w *WordCloud) findFreePosition(wrd *word) (int, int, error) {
 	var x, y int
 	i := 1
-	for {
-		//get a random x position between 0 and the width of the image - the width of the word
-
-		x = int(rnd.Int63() % int64(w.imgWidth-wrd.width))
-		y = int(rnd.Int63()%int64(w.imgHeight-wrd.height)) + wrd.height
-		wrd.x = x
-		wrd.y = y
-		if w.checkCollition(wrd, 20) {
+	//get a random position that is free
+	if w.Placement == PlacementRandomWithRotation || w.Placement == PlacementRandom || w.Placement == PlacementCenterWithRotation || len(w.placedWords) == 0 {
+		for {
+			//get a random x position between 0 and the width of the image - the width of the word
+			x = int(rnd.Int63() % int64(w.imgWidth-wrd.width))
+			y = int(rnd.Int63()%int64(w.imgHeight-wrd.height)) + wrd.height
+			wrd.x = x
+			wrd.y = y
+			if !w.checkCollision(wrd) {
+				return x, y, nil
+			}
 			i++
 			if i > 1000 {
-				fmt.Println("could not find free position for", wrd.word)
-				return 0, 0, errors.New("could not find free position")
+				return 0, 0, errors.New(fmt.Sprintf("could not find free position for word %s", wrd.word))
 			}
-			continue
 		}
-		//move vertical to center until we hit something
-		x, y := w.moveImage(x, y, 0, 10, wrd)
+	}
+
+	//if center placement is selected, move it to the center of the image
+	if w.Placement == PlacementCenter || w.Placement == PlacementCenterWithRotation {
+		for {
+			x = int(rnd.Int63() % int64(w.imgWidth-wrd.width))
+			y = int(rnd.Int63()%int64(w.imgHeight-wrd.height)) + wrd.height
+			wrd.x = x
+			wrd.y = y
+			if !w.checkCollision(wrd) {
+				break
+			}
+			i++
+			if i > 1000 {
+				return 0, 0, errors.New(fmt.Sprintf("could not find free position for word %s", wrd.word))
+			}
+		}
+		x, y = w.moveImage(x, y, 0, 1, wrd)
+		x, y = w.moveImage(x, y, 0, 10, wrd)
 		//move horizontal to the center of the image until we hit something
 		x, y = w.moveImage(x, y, 10, 0, wrd)
-		////move vertical to the center of the image until we hit something
-		//w.moveImage(wrd.x, wrd.y, 0, -10, wrd)
 
-		fmt.Println("found free position")
-		wrd.x = x
-		wrd.y = y
 		return x, y, nil
-
 	}
-
 	return x, y, nil
-}
-
-func (w *WordCloud) makeFont(size float64) (font.Face, error) {
-	log.Printf("trying to make font with size: %f", size)
-	switch w.fontType {
-	case FontTypeOpenType:
-		return w.makeOpenTypeFont(size)
-	case FontTypeTrueType:
-		return w.makeTrueTypeFont(size)
-	default:
-		log.Printf("error: font type not set")
-		return nil, errors.New("font type not set")
-	}
-}
-
-func (w *WordCloud) makeOpenTypeFont(size float64) (font.Face, error) {
-	log.Printf("trying to make open type font with size: %f", size)
-	op, err := opentype.Parse(w.font)
-	if err != nil {
-		log.Printf("error parsing openType font: %s", err)
-		return nil, err
-	}
-	font, err := opentype.NewFace(op, &opentype.FaceOptions{Size: size})
-	if err != nil {
-		log.Printf("error creating openType font: %s", err)
-		return nil, err
-	}
-	return font, nil
-}
-
-func (w *WordCloud) makeTrueTypeFont(size float64) (font.Face, error) {
-	log.Printf("trying to make true type font with size: %f", size)
-	tt, err := truetype.Parse(w.font)
-	if err != nil {
-		log.Printf("error parsing true tipe font: %s", err)
-		return nil, err
-	}
-	return truetype.NewFace(tt, &truetype.Options{Size: size}), nil
-}
-
-func (w *WordCloud) SetFont(file string) error {
-	log.Printf("trying to set font to: %s", file)
-
-	//check if file extension is ttf or otf
-	postfix := file[len(file)-3:]
-	switch postfix {
-	case "ttf":
-		w.fontType = FontTypeTrueType
-	case "otf":
-		w.fontType = FontTypeOpenType
-	default:
-		w.fontType = FontTypeNotSet
-		log.Printf("error: unknown font type: %s", postfix)
-		return errors.New("unknown font type")
-	}
-
-	//open font file
-	fileContent, err := fileNameToByteArray(file)
-	if err != nil {
-		log.Printf("error opening font file: %s", err)
-		return err
-	}
-	w.font = fileContent
-
-	return nil
 }
 
 func (w *WordCloud) SaveImage(fileName string) error {
@@ -224,17 +203,42 @@ func (w *WordCloud) SaveImage(fileName string) error {
 	return nil
 }
 
-func randomColor() color.Color {
-	r := uint8(rnd.Int63() % 255)
-	g := uint8(rnd.Int63() % 255)
-	b := uint8(rnd.Int63() % 255)
-	c := color.RGBA{
-		R: r,
-		G: g,
-		B: b,
-		A: 255,
+// temp Function
+func (w *WordCloud) getColor() (color.Color, error) {
+	if w.RandomFontColors || len(w.FontColors) == 0 {
+		for {
+			c := color.RGBA{
+				R: uint8(rnd.Int63() % 255),
+				G: uint8(rnd.Int63() % 255),
+				B: uint8(rnd.Int63() % 255),
+				A: 255,
+			}
+			if !w.ContrastCheck || contrastTest(c, w.BackgroundColor, w.ContrastThreshold) {
+				return c, nil
+			}
+		}
 	}
-	return c
+	//create random number between 0 and len(w.FontColors)
+	for {
+		if len(w.FontColors) == 0 {
+			return nil, errors.New("no font colors (with enough contrast) set")
+		}
+		c := w.FontColors[rnd.Int63()%int64(len(w.FontColors))]
+		if !w.ContrastCheck {
+			return c, nil
+		}
+		if contrastTest(c, w.BackgroundColor, w.ContrastThreshold) {
+			return c, nil
+		} else {
+			//remove the color from the color list
+			for i, v := range w.FontColors {
+				if v == c {
+					w.FontColors = append(w.FontColors[:i], w.FontColors[i+1:]...)
+					break
+				}
+			}
+		}
+	}
 }
 func (w *WordCloud) moveImage(x, y, dx, dy int, wrd *word) (int, int) {
 	w2 := *wrd
@@ -255,7 +259,7 @@ func (w *WordCloud) moveImage(x, y, dx, dy int, wrd *word) (int, int) {
 		}
 		w2.x = xn
 		w2.y = yn
-		if w.checkCollition(&w2, 10) {
+		if w.checkCollision(&w2) {
 			xn = xn - dx
 			yn = yn - dy
 			return xn, yn
@@ -267,4 +271,15 @@ func (w *WordCloud) moveImage(x, y, dx, dy int, wrd *word) (int, int) {
 		yn = yn + dy
 	}
 	return xn, yn
+}
+
+func contrastTest(a, b color.Color, minDelta float64) bool {
+	dr := math.Abs(float64(int(a.(color.RGBA).R) - int(b.(color.RGBA).R)))
+	dg := math.Abs(float64(int(a.(color.RGBA).G) - int(b.(color.RGBA).G)))
+	db := math.Abs(float64(int(a.(color.RGBA).B) - int(b.(color.RGBA).B)))
+	if dr+dg+db > minDelta {
+		return true
+	} else {
+		return false
+	}
 }
