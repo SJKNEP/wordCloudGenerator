@@ -2,10 +2,11 @@ module github.com/SJKNEP/wordCloudGenerator
 
 go 1.20
 
-require golang.org/x/image v0.11.0
-
 require (
-	github.com/fogleman/gg v1.3.0 // indirect
-	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	github.com/anthonynsimon/bild v0.13.0
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
+	github.com/icza/mjpeg v0.0.0-20230330134156-38318e5ab8f4
+	golang.org/x/image v0.11.0
 )
+
+require golang.org/x/text v0.12.0 // indirect
