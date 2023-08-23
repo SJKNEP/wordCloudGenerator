@@ -10,7 +10,6 @@ import (
 	"image/color"
 	"image/draw"
 	"image/jpeg"
-	"image/png"
 	"log"
 	"math"
 	"math/rand"
@@ -45,20 +44,20 @@ func (w *WordCloud) PlaceWords() error {
 			return err
 		}
 		err1 = w.placeWord(&w.wordList[i], c)
-	}
-
-	f, err := os.Create("img2.png")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	fmt.Println("saveing file")
-	if err = png.Encode(f, w.img); err != nil {
-		log.Printf("failed to encode: %v", err)
+		f, err := os.Create(fmt.Sprintf("video/%d.jpeg", i))
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		fmt.Printf(".")
+		if err = jpeg.Encode(f, w.img, nil); err != nil {
+			log.Printf("failed to encode: %v", err)
+		}
 	}
 	if err1 != nil {
 		return err1
 	}
+	makeVideo(true, "test", len(w.placedWords))
 	return nil
 }
 
