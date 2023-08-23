@@ -22,6 +22,18 @@ func (w *WordCloud) ParseWordList(wl []string) error {
 	return err
 }
 
+func (w *WordCloud) ProcessWordList(wl map[string]uint) error {
+	w.placedWords = []word{}
+	w.fontCollection = map[float64]font.Face{}
+	w.wordList = sortWordList(wl)
+	if w.WordScaling != WordScalingLinear && w.wordSizing.attempts == 0 {
+		w.scaleWordCount()
+	}
+	err := w.calcWordSize()
+	w.wordSizing.attempts++
+	return err
+}
+
 func (w *WordCloud) scaleWordCount() {
 	biggestWord := w.wordList[0].count
 	if w.WordScaling == WordsScalingSqrt {
