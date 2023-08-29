@@ -26,6 +26,7 @@ func (w *WordCloud) ProcessWordList(wl map[string]uint) error {
 	w.placedWords = []word{}
 	w.fontCollection = map[float64]font.Face{}
 	w.wordList = sortWordList(wl)
+	fmt.Printf(("%+v\n"), w.wordList)
 	if w.WordScaling != WordScalingLinear && w.wordSizing.attempts == 0 {
 		w.scaleWordCount()
 	}

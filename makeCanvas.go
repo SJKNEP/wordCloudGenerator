@@ -43,42 +43,37 @@ func (w *WordCloud) PlaceWords() error {
 		if err != nil {
 			return err
 		}
-		err1 = w.placeWord(&w.wordList[i], c)
-		f, err := os.Create(fmt.Sprintf("video/%d.jpeg", i))
-		if err != nil {
-			panic(err)
-		}
-		defer f.Close()
-		fmt.Printf(".")
-		if err = jpeg.Encode(f, w.img, nil); err != nil {
-			log.Printf("failed to encode: %v", err)
-		}
+		w.wordList[i].color = &c
+		err1 = w.placeWord(&w.wordList[i])
+		//f, err := os.Create(fmt.Sprintf("%s/video/%d.jpeg", currentDirectory, i))
+		//if err != nil {
+		//	panic(err)
+		//}
+		//defer f.Close()
+		//fmt.Printf(".")
+		//if err = jpeg.Encode(f, w.img, nil); err != nil {
+		//	log.Printf("failed to encode: %v", err)
+		//}
 	}
 	if err1 != nil {
 		return err1
 	}
-	makeVideo(true, "test", len(w.placedWords))
+	//makeVideo(true, "video", len(w.placedWords), w.imgWidth, w.imgHeight)
+	w.makeVideoV2(true, "videoV2", w.imgWidth, w.imgHeight)
 	return nil
 }
 
-func (w *WordCloud) placeWord(wrd *word, c color.Color) error {
+func (w *WordCloud) placeWord(wrd *word) error {
+	//catch for if the word is empty
+	if wrd.word == "" {
+		return nil
+	}
 	var img *image.RGBA
 	if len(w.placedWords) == 0 && w.PlacementBiggestWord == PlacementCenter {
-		y := (w.imgHeight / 2) + (wrd.height / 2)
-		x := (w.imgWidth / 2) - (wrd.width / 2)
-		wrd.x = x
-		wrd.y = y
-		pos := fixed.Point26_6{}
-		//i hate magic numbers
-		pos.X = fixed.Int26_6((wrd.x - w.FreeSpaceAroundWords) << 6)
-		pos.Y = fixed.Int26_6((wrd.y) << 6)
-		fnt := font.Drawer{
-			Dst:  w.img,
-			Src:  image.NewUniform(c),
-			Face: w.fontCollection[wrd.size],
-			Dot:  pos,
-		}
-		fnt.DrawString(wrd.word)
+		wrd.y = (w.imgHeight / 2) + (wrd.height / 2)
+		wrd.x = (w.imgWidth / 2) - (wrd.width / 2) - (w.FreeSpaceAroundWords * 2)
+		w.placeWordOnCanvas(wrd)
+
 	} else {
 		//get a random result that is 75% of the time true
 		wrd.horizontal = rnd.Int63()%100 < 75
@@ -95,7 +90,7 @@ func (w *WordCloud) placeWord(wrd *word, c color.Color) error {
 			pos.Y = fixed.Int26_6(wrd.height << 6)
 			fnt := font.Drawer{
 				Dst:  img,
-				Src:  image.NewUniform(c),
+				Src:  image.NewUniform(*wrd.color),
 				Face: w.fontCollection[wrd.size],
 				Dot:  pos,
 			}
@@ -120,7 +115,7 @@ func (w *WordCloud) placeWord(wrd *word, c color.Color) error {
 			pos.Y = fixed.Int26_6(wrd.y << 6)
 			fnt := font.Drawer{
 				Dst:  w.img,
-				Src:  image.NewUniform(c),
+				Src:  image.NewUniform(*wrd.color),
 				Face: w.fontCollection[wrd.size],
 				Dot:  pos,
 			}
@@ -138,9 +133,22 @@ func (w *WordCloud) placeWord(wrd *word, c color.Color) error {
 		}
 
 	}
-
 	w.placedWords = append(w.placedWords, *wrd)
 	return nil
+}
+
+func (w *WordCloud) placeWordOnCanvas(wrd *word) {
+	fmt.Println(wrd.word)
+	pos := fixed.Point26_6{}
+	pos.X = fixed.Int26_6(wrd.x << 6)
+	pos.Y = fixed.Int26_6(wrd.y << 6)
+	fnt := font.Drawer{
+		Dst:  w.img,
+		Src:  image.NewUniform(*wrd.color),
+		Face: w.fontCollection[wrd.size],
+		Dot:  pos,
+	}
+	fnt.DrawString(wrd.word)
 }
 
 func (w *WordCloud) findFreePosition(wrd *word) (int, int, error) {
@@ -269,7 +277,6 @@ func (w *WordCloud) moveImage(x, y, dx, dy int, wrd *word) (int, int) {
 		xn = xn + dx
 		yn = yn + dy
 	}
-	return xn, yn
 }
 
 func contrastTest(a, b color.Color, minDelta float64) bool {
@@ -281,4 +288,8 @@ func contrastTest(a, b color.Color, minDelta float64) bool {
 	} else {
 		return false
 	}
+}
+
+func (w *WordCloud) GetImage() image.Image {
+	return w.img
 }

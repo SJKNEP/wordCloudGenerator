@@ -74,6 +74,5 @@ type word struct {
 	x          int
 	y          int
 	horizontal bool
+	color      *color.Color
 }
-
-type fonts map[float64]font.Face

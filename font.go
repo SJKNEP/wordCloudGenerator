@@ -28,12 +28,12 @@ func (w *WordCloud) makeOpenTypeFont(size float64) (font.Face, error) {
 		log.Printf("error parsing openType font: %s", err)
 		return nil, err
 	}
-	font, err := opentype.NewFace(op, &opentype.FaceOptions{Size: size})
+	fnt, err := opentype.NewFace(op, &opentype.FaceOptions{Size: size})
 	if err != nil {
 		log.Printf("error creating openType font: %s", err)
 		return nil, err
 	}
-	return font, nil
+	return fnt, nil
 }
 
 func (w *WordCloud) makeTrueTypeFont(size float64) (font.Face, error) {
@@ -65,7 +65,7 @@ func (w *WordCloud) SetFont(file string) error {
 	//open font file
 	fileContent, err := fileNameToByteArray(file)
 	if err != nil {
-		log.Printf("error opening font file: %s", err)
+		log.Fatal("error opening font file: %s", err)
 		return err
 	}
 	w.font = fileContent

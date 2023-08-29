@@ -1,6 +1,16 @@
 package wordCloudGenerator
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+)
+
+var currentDirectory string
+
+func init() {
+	executablePath, _ := os.Executable()
+	currentDirectory = filepath.Dir(executablePath)
+}
 
 func fileNameToByteArray(fileName string) ([]byte, error) {
 	//check if file exists
