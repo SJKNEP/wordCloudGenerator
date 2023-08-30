@@ -73,6 +73,42 @@ func (w *WordCloud) makeVideo(reverse bool, name string, width int, h int) error
 			buf, err = makeFrame(img)
 			aw.AddFrame(buf.Bytes())
 
+			if i == 5 {
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
+			}
+			if i == 4 {
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
+			}
+			if i == 3 {
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
+			}
+			if i == 2 {
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
+			}
+			if i == 1 {
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
+			}
+
 			fmt.Printf(".")
 			if err != nil {
 				panic(err)
@@ -100,18 +136,23 @@ func (w *WordCloud) makeVideo(reverse bool, name string, width int, h int) error
 			//slow down at the end of the video
 			if i < 5 {
 				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
 			}
 			if i < 4 {
 				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
 			}
 			if i < 3 {
 				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
 			}
 			if i < 2 {
 				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
 			}
 			if i < 1 {
 				aw.AddFrame(buf.Bytes())
+				fmt.Printf(".")
 			}
 
 			fmt.Printf(".")
