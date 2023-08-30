@@ -29,7 +29,7 @@ func (w *WordCloud) MakeVideo(reverse bool, name string) error {
 	if !w.Video {
 		return errors.New("Video is not enabled")
 	}
-	return w.makeVideo(true, name, w.imgWidth, w.imgHeight)
+	return w.makeVideo(reverse, name, w.imgWidth, w.imgHeight)
 }
 
 func (w *WordCloud) makeVideo(reverse bool, name string, width int, h int) error {
