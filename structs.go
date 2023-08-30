@@ -30,6 +30,7 @@ type WordCloud struct {
 	FreeSpaceAroundWords int
 	ContrastCheck        bool
 	ContrastThreshold    float64
+	Video                bool
 }
 
 type WordScaling int

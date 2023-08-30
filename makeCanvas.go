@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/jpeg"
+	"image/png"
 	"log"
 	"math"
 	"math/rand"
@@ -58,8 +59,6 @@ func (w *WordCloud) PlaceWords() error {
 	if err1 != nil {
 		return err1
 	}
-	//makeVideo(true, "video", len(w.placedWords), w.imgWidth, w.imgHeight)
-	w.makeVideoV2(true, "videoV2", w.imgWidth, w.imgHeight)
 	return nil
 }
 
@@ -77,7 +76,6 @@ func (w *WordCloud) placeWord(wrd *word) error {
 	} else {
 		//get a random result that is 75% of the time true
 		wrd.horizontal = rnd.Int63()%100 < 75
-		//wrd.horizontal = false
 		if w.Placement != PlacementRandomWithRotation && w.Placement != PlacementCenterWithRotation {
 			wrd.horizontal = true
 		}
@@ -110,16 +108,7 @@ func (w *WordCloud) placeWord(wrd *word) error {
 			return err
 		}
 		if wrd.horizontal {
-			pos := fixed.Point26_6{}
-			pos.X = fixed.Int26_6(wrd.x << 6)
-			pos.Y = fixed.Int26_6(wrd.y << 6)
-			fnt := font.Drawer{
-				Dst:  w.img,
-				Src:  image.NewUniform(*wrd.color),
-				Face: w.fontCollection[wrd.size],
-				Dot:  pos,
-			}
-			fnt.DrawString(wrd.word)
+			w.placeWordOnCanvas(wrd)
 		} else {
 			s := img.Rect.Bounds()
 			//draw the image on the canvas w.img
@@ -129,6 +118,22 @@ func (w *WordCloud) placeWord(wrd *word) error {
 			}
 			//draw this image with alpha ontop of w.img
 			draw.Draw(w.img, r, img, image.Point{}, draw.Over)
+
+			if w.Video {
+				imgT := image.NewRGBA(image.Rect(0, 0, w.imgWidth, w.imgHeight))
+				//set the background color to transparent
+				draw.Draw(imgT, imgT.Bounds(), &image.Uniform{C: color.RGBA{R: 0, G: 0, B: 0, A: 0}}, image.Point{}, draw.Src)
+				draw.Draw(imgT, r, imgT, image.Point{}, draw.Over)
+
+				f, err := os.Create(fmt.Sprintf("%s/video/%d.png", currentDirectory, len(w.placedWords)))
+				if err != nil {
+					panic(err)
+				}
+				defer f.Close()
+				if err = png.Encode(f, imgT); err != nil {
+					panic(err)
+				}
+			}
 
 		}
 
@@ -149,6 +154,33 @@ func (w *WordCloud) placeWordOnCanvas(wrd *word) {
 		Dot:  pos,
 	}
 	fnt.DrawString(wrd.word)
+
+	if !w.Video {
+		return
+	}
+	//draw the same string on a transparent background
+	//create a new image with the size of the master image
+	img := image.NewRGBA(image.Rect(0, 0, w.imgWidth, w.imgHeight))
+	//set the background color to transparent
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: color.RGBA{R: 0, G: 0, B: 0, A: 0}}, image.Point{}, draw.Src)
+	//draw the word on the transparent image
+	fnt = font.Drawer{
+		Dst:  img,
+		Src:  image.NewUniform(*wrd.color),
+		Face: w.fontCollection[wrd.size],
+		Dot:  pos,
+	}
+	fnt.DrawString(wrd.word)
+	//save to a file as a png
+	f, err := os.Create(fmt.Sprintf("%s/video/%d.png", currentDirectory, len(w.placedWords)))
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	if err = png.Encode(f, img); err != nil {
+		panic(err)
+	}
+
 }
 
 func (w *WordCloud) findFreePosition(wrd *word) (int, int, error) {
@@ -280,6 +312,8 @@ func (w *WordCloud) moveImage(x, y, dx, dy int, wrd *word) (int, int) {
 }
 
 func contrastTest(a, b color.Color, minDelta float64) bool {
+	//check if the contrast is possible:
+
 	dr := math.Abs(float64(int(a.(color.RGBA).R) - int(b.(color.RGBA).R)))
 	dg := math.Abs(float64(int(a.(color.RGBA).G) - int(b.(color.RGBA).G)))
 	db := math.Abs(float64(int(a.(color.RGBA).B) - int(b.(color.RGBA).B)))
